@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	test "github.com/pebrc/aoc-2019/go/test"
 )
 
 func intcode(program []int64) int64 {
@@ -30,25 +32,19 @@ func intcodeWithInput(program []int64, noun, verb int64) int64 {
 	executable := make([]int64, len(program))
 	copy(executable, program)
 	executable[1] = noun // noun
-	executable[2] = verb  // verb
+	executable[2] = verb // verb
 	return intcode(executable)
-}
-
-func assert(actual, expected int64) {
-	if actual  != expected {
-		log.Fatal(fmt.Errorf("expected %d but was %d", expected, actual))
-	}
 }
 
 func main() {
 	testProgram1 := []int64{
 		1, 0, 0, 0, 99,
 	}
-	assert(intcode(testProgram1), 2)
-	testProgram2 := []int64 {
-		1,1,1,4,99,5,6,0,99,
+	test.Assert(intcode(testProgram1), 2)
+	testProgram2 := []int64{
+		1, 1, 1, 4, 99, 5, 6, 0, 99,
 	}
-	assert(intcode(testProgram2), 30)
+	test.Assert(intcode(testProgram2), 30)
 	bytes, err := ioutil.ReadFile("../inputs/day2_1")
 	if err != nil {
 		log.Fatal(err)
