@@ -20,12 +20,10 @@ type amplifierIO struct {
 
 func (a *amplifierIO) ReadInt() int64 {
 	var val int64
-	switch a.inputPos {
-	case 0:
+	if a.inputPos == 0 {
 		val = int64(a.phaseSetting)
-	default:
-		val = <-a.in
 	}
+	val = <-a.in
 	a.inputPos++
 	return val
 }
@@ -93,7 +91,6 @@ func permutations(xs []int, n int) [][]int {
 }
 
 func main() {
-
 	test1 := []int64{3, 15, 3, 16, 1002, 16, 10, 16, 1, 16, 15, 15, 4, 15, 99, 0, 0}
 	output, setting := findPhaseSetting(test1, phaseSettingsPart1)
 	test.Assert(output, 43210)
