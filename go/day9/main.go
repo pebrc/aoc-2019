@@ -28,5 +28,4 @@ func main() {
 
 
 	intcode.RunWithInput(p, intcode.Input(2), false)
-
 }

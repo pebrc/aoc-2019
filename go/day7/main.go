@@ -47,7 +47,7 @@ func runAmplifierProgram(p intcode.Program, phaseSetting []int) int64 {
 				in:           chans[idx],
 				phaseSetting: phaseSetting[idx],
 			}
-			intcode.RunWithInput(p, io, false)
+			intcode.RunMachineWithInput(fmt.Sprintf("a-%d", idx), p, io, false)
 			wg.Done()
 		}()
 	}

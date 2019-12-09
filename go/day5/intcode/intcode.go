@@ -55,9 +55,13 @@ type cmd struct {
 	opName  string
 	numArgs int
 	modes   []int64
+	prgr    Program
+	machine string
+	debug   bool
 }
 
-func parse(ip, rb int64, op int64) cmd {
+func newCmd(ip, rb int64, program Program, machine string,  debug bool) cmd {
+	op := program[ip]
 	opCode := op % 100
 	var numArgs int
 	var opStr string
@@ -97,16 +101,61 @@ func parse(ip, rb int64, op int64) cmd {
 		opName:  opStr,
 		numArgs: numArgs,
 		modes:   []int64{0, (op / 100) % 10, (op / 1000) % 10, (op / 10000) % 10},
+		prgr:    program,
+		debug:   debug,
+		machine: machine,
 	}
+}
+
+func (c cmd) exec(io IO) (int64, int64, Program) {
+	c.prgr = alloc(c.prgr, c, c.debug)
+	if c.debug {
+		fmt.Printf("{%s} %v\n", c.String(), c.prgr[c.ip:c.ip+c.offset()])
+	}
+	switch c.op {
+	case 1: // addition
+		c.prgr[c.ptr3()] = c.arg1() + c.arg2()
+	case 2: // multiplication
+		c.prgr[c.ptr3()] = c.arg1() * c.arg2()
+	case 3: // read
+		c.prgr[c.ptr1()] = io.ReadInt()
+	case 4: // write
+		io.WriteInt(c.arg1())
+	case 5: // jmp if true
+		if c.arg1() != 0 {
+			return c.arg2(), c.rb, c.prgr
+		}
+	case 6: // jmp if false
+		if c.arg1() == 0 {
+			return c.arg2(), c.rb, c.prgr
+		}
+	case 7: // cmp less than
+		var x int64 = 0
+		if c.arg1() < c.arg2() {
+			x = 1
+		}
+		c.prgr[c.ptr3()] = x
+	case 8: // cmp equals
+		var x int64 = 0
+		if c.arg1() == c.arg2() {
+			x = 1
+		}
+		c.prgr[c.ptr3()] = x
+	case 9: // set c.rb
+		c.rb += c.arg1()
+	case 99:
+		return -1, -1, c.prgr
+	}
+	return c.ip + c.offset(), c.rb, c.prgr
 }
 
 func (c cmd) offset() int64 {
 	return int64(c.numArgs + 1)
 }
 
-func (c cmd) ptr(pos, mode int64, p Program) int64 {
+func (c cmd) ptr(pos, mode int64) int64 {
 	idx := c.ip + pos
-	ptr := p[idx]
+	ptr := c.prgr[idx]
 	switch mode {
 	case 0:
 		return ptr
@@ -118,30 +167,34 @@ func (c cmd) ptr(pos, mode int64, p Program) int64 {
 	panic("not a supported arg mode")
 }
 
-func (c cmd) arg(pos, mode int64, p Program) int64 {
-	return p[c.ptr(pos, mode, p)]
+func (c cmd) arg(pos, mode int64, ) int64 {
+	return c.prgr[c.ptr(pos, mode)]
 }
 
-func (c cmd) arg1(p Program) int64 {
-	return c.arg(1, c.modes[1], p)
+func (c cmd) arg1() int64 {
+	return c.arg(1, c.modes[1])
 }
 
-func (c cmd) arg2(p Program) int64 {
-	return c.arg(2, c.modes[2], p)
+func (c cmd) arg2() int64 {
+	return c.arg(2, c.modes[2])
 }
 
-func (c cmd) arg3(p Program) int64 {
-	return c.arg(3, c.modes[3], p)
+func (c cmd) arg3() int64 {
+	return c.arg(3, c.modes[3])
 }
 
-func (c cmd) ptr3(p Program) int64 {
-	return c.ptr(3, c.modes[3], p)
+func (c cmd) ptr1() int64 {
+	return c.ptr(1, c.modes[1])
 }
 
-func (c cmd) maxPtr(p Program) int64 {
+func (c cmd) ptr3() int64 {
+	return c.ptr(3, c.modes[3])
+}
+
+func (c cmd) maxPtr() int64 {
 	var max, i int64
 	for i = 1; i <= int64(c.numArgs); i++ {
-		ptr := c.ptr(i, c.modes[i], p)
+		ptr := c.ptr(i, c.modes[i])
 		if ptr > max {
 			max = ptr
 		}
@@ -149,17 +202,17 @@ func (c cmd) maxPtr(p Program) int64 {
 	return max
 }
 
-func (c cmd) String(p Program) string {
-	str := fmt.Sprintf("ip: %d rb: %d op: %s", c.ip, c.rb, c.opName)
+func (c cmd) String() string {
+	str := fmt.Sprintf("%s ip: %d rb: %d op: %s", c.machine, c.ip, c.rb, c.opName)
 	for i := 1; i <= c.numArgs; i++ {
-		str = str + fmt.Sprintf(" arg_%d: %d", i, c.arg(int64(i), c.modes[i], p))
+		str = str + fmt.Sprintf(" arg_%d: %d", i, c.arg(int64(i), c.modes[i]))
 	}
 	return str
 }
 
 func alloc(src Program, c cmd, debug bool) Program {
 	allocated := src
-	diff := (c.maxPtr(src) + 1) - int64(len(src))
+	diff := (c.maxPtr() + 1) - int64(len(src))
 	if diff > 0 {
 		if debug {
 			println(fmt.Sprintf("allocating adding %d to %d new len %d", diff, len(src), len(src)+int(diff)))
@@ -170,68 +223,28 @@ func alloc(src Program, c cmd, debug bool) Program {
 	return allocated
 }
 
-func intcode(prgr Program, io IO, debug bool) {
+func intcode(machineName string, prgr Program, io IO, debug bool) {
 	var ip, rb int64
 	var exit bool
 	for !exit {
-		cmd := parse(ip, rb, prgr[ip])
-		prgr = alloc(prgr, cmd, debug)
-		if debug {
-			fmt.Printf("{%s} %v\n", cmd.String(prgr), prgr[ip:ip+cmd.offset()])
-		}
-		switch cmd.op {
-		case 1: // addition
-			prgr[cmd.ptr3(prgr)] = cmd.arg1(prgr) + cmd.arg2(prgr)
-			ip += cmd.offset()
-		case 2: // multiplication
-			prgr[cmd.ptr3(prgr)] = cmd.arg1(prgr) * cmd.arg2(prgr)
-			ip += cmd.offset()
-		case 3: // read
-			prgr[cmd.ptr3(prgr)] = io.ReadInt()
-			ip += cmd.offset()
-		case 4: // write
-			io.WriteInt(cmd.arg1(prgr))
-			ip += cmd.offset()
-		case 5: // jmp if true
-			if cmd.arg1(prgr) != 0 {
-				ip = cmd.arg2(prgr)
-			} else {
-				ip += cmd.offset()
-			}
-		case 6: // jmp if false
-			if cmd.arg1(prgr) == 0 {
-				ip = cmd.arg2(prgr)
-			} else {
-				ip += cmd.offset()
-			}
-		case 7: // cmp less than
-			var x int64 = 0
-			if cmd.arg1(prgr) < cmd.arg2(prgr) {
-				x = 1
-			}
-			prgr[cmd.ptr3(prgr)] = x
-			ip += cmd.offset()
-		case 8: // cmp equals
-			var x int64 = 0
-			if cmd.arg1(prgr) == cmd.arg2(prgr) {
-				x = 1
-			}
-			prgr[cmd.ptr3(prgr)] = x
-			ip += cmd.offset()
-		case 9: // set rb
-			rb += cmd.arg1(prgr)
-			ip += cmd.offset()
-		case 99:
+		cmd := newCmd(ip, rb, prgr, machineName, debug)
+		ip, rb, prgr = cmd.exec(io)
+		if ip < 0 {
 			exit = true
 		}
-
 	}
 }
 
 func RunWithInput(prgr Program, input IO, debug bool) {
 	executable := make([]int64, len(prgr))
 	copy(executable, prgr)
-	intcode(executable, input, debug)
+	intcode("", executable, input, debug)
+}
+
+func RunMachineWithInput(machine string, prgr Program, input IO, debug bool) {
+	executable := make([]int64, len(prgr))
+	copy(executable, prgr)
+	intcode(machine, executable, input, debug)
 }
 
 func ParseProgram(fileName string) Program {
