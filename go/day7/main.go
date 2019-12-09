@@ -22,8 +22,9 @@ func (a *amplifierIO) ReadInt() int64 {
 	var val int64
 	if a.inputPos == 0 {
 		val = int64(a.phaseSetting)
+	} else {
+		val = <-a.in
 	}
-	val = <-a.in
 	a.inputPos++
 	return val
 }
