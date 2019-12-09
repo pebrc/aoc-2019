@@ -7,14 +7,15 @@
 (def layer-size (* width height))
 
 (def input (->> (seq (slurp "../inputs/day8_1"))
-     (map #(Integer/parseInt (str %)))
-     (partition layer-size)))
+                (map #(Integer/parseInt (str %)))
+                (partition layer-size)))
 
-(def part1 (->> input
-                (map frequencies)
-                (apply min-key #(get % 0))
-                ((juxt #(get % 1) #(get % 2)))
-                (reduce *)))
+(defn part1 []
+  (->> input
+       (map frequencies)
+       (apply min-key #(get % 0))
+       ((juxt #(get % 1) #(get % 2)))
+       (reduce *)))
 
 (defn overlay [input]
   (->> (apply map vector input)
@@ -22,11 +23,11 @@
 
 (defn render [i]
   (->>
-   (map #(if (= 0 %) " " "*") i)
+   (map {0 " " 1 "*"} i)
    (partition width )
    (map #(println (join "" %)))))
 
-(def part2
+(defn part2 []
   (render (overlay input)))
 
 
